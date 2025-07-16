@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>إدارة النثرية</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+    }
+    input, button {
+      padding: 8px;
+      margin: 5px;
+      font-size: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: #fff;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    #balance {
+      font-size: 20px;
+      font-weight: bold;
+      margin-top: 20px;
+      color: green;
+    }
+    #pdf-section {
+      margin-top: 40px;
+    }
+    .delete-btn {
+      cursor: pointer;
+      color: red;
+      font-weight: bold;
+      border: none;
+      background: none;
+      font-size: 18px;
+    }
+    .delete-btn:hover {
+      color: darkred;
+    }
+    .no-print {
+      display: table-cell;
+    }
+  </style>
+</head>
+<body>
+
+<h1>إدارة النثرية</h1>
+
+<div>
+  <label>النثرية:</label>
+  <input type="number" id="initialAmount" placeholder="مثال: 1000" />
+  <button onclick="setInitialAmount()">تأكيد</button>
+
+  <hr />
+
+  <label>المبلغ المنصرف:</label>
+  <input type="number" id="expenseAmount" placeholder="مثال: 100" />
+  <label>الوصف:</label>
+  <input type="text" id="expenseReason" placeholder="مثال: شراء أدوات" />
+  <button onclick="addExpense()">إضافة</button>
+</div>
+
+<div id="pdf-section" style="margin-top:30px">
+  <div id="initial-display" style="font-size:18px; margin-bottom:10px;"></div>
+
+  <table id="expenseTable">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>الوصف</th>
+        <th>المبلغ</th>
+        <th class="no-print">حذف</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="balance"></div>
+</div>
+
+<br />
+<button onclick="downloadPDF()">تحميل PDF</button>
+<button onclick="resetAll()">إعادة تعيين</button>
+
+<script>
+  let initialAmount = 0;
+  let balance = 0;
+  let expenses = [];
+
+  window.onload = () => {
+    const savedInitial = localStorage.getItem('initialAmount');
+    const savedExpenses = localStorage.getItem('expenses');
+
+    if (savedInitial) {
+      initialAmount = parseFloat(savedInitial);
+      balance = initialAmount;
+      document.getElementById('initialAmount').value = initialAmount;
+      document.getElementById('initialAmount').disabled = true;
+    }
+    if (savedExpenses) {
+      expenses = JSON.parse(savedExpenses);
+      expenses.forEach(exp => addExpenseToTable(exp.date, exp.reason, exp.amount, false));
+      balance = expenses.reduce((acc, exp) => acc - exp.amount, initialAmount);
+    }
+    updateBalance();
+    updateInitialDisplay();
+  };
+
+  function formatAmount(val) {
+    return (val % 1 === 0) ? val.toFixed(0) : val.toFixed(2);
+  }
+
+  function setInitialAmount() {
+    const amount = parseFloat(document.getElementById("initialAmount").value);
+    if (!isNaN(amount)) {
+      initialAmount = amount;
+      balance = amount;
+      updateBalance();
+      updateInitialDisplay();
+      document.getElementById("initialAmount").disabled = true;
+      saveData();
+    }
+  }
+
+  function addExpense() {
+    const amount = parseFloat(document.getElementById("expenseAmount").value);
+    const reason = document.getElementById("expenseReason").value.trim();
+    const date = new Date().toLocaleDateString("en-GB");
+
+    if (!isNaN(amount) && reason) {
+      addExpenseToTable(date, reason, amount, true);
+      balance -= amount;
+      updateBalance();
+      saveData();
+
+      document.getElementById("expenseAmount").value = "";
+      document.getElementById("expenseReason").value = "";
+    }
+  }
+
+  function addExpenseToTable(date, reason, amount, addToArray = true) {
+    const table = document.getElementById("expenseTable").querySelector("tbody");
+    const row = table.insertRow();
+    row.insertCell(0).textContent = date;
+    row.insertCell(1).textContent = reason;
+    row.insertCell(2).textContent = formatAmount(amount);
+
+    const delCell = row.insertCell(3);
+    delCell.className = 'no-print';
+    const delBtn = document.createElement('button');
+    delBtn.textContent = 'حذف';
+    delBtn.className = 'delete-btn';
+    delBtn.onclick = () => {
+      const index = Array.from(table.rows).indexOf(row);
+      expenses.splice(index, 1);
+      balance += amount;
+      updateBalance();
+      saveData();
+      row.remove();
+    };
+    delCell.appendChild(delBtn);
+
+    if (addToArray) {
+      expenses.push({ date, reason, amount });
+    }
+  }
+
+  function updateBalance() {
+    document.getElementById("balance").innerHTML =
+      "<span>المبلغ المتبقي :</span> <span style='direction:ltr; display:inline-block; min-width:60px'>" +
+      formatAmount(balance) + "</span>";
+  }
+
+  function updateInitialDisplay() {
+    document.getElementById("initial-display").innerHTML =
+      "<span>النثرية :</span> <span style='direction:ltr; display:inline-block; min-width:60px'>" +
+      formatAmount(initialAmount) + "</span>";
+  }
+
+  function saveData() {
+    localStorage.setItem('initialAmount', initialAmount);
+    localStorage.setItem('expenses', JSON.stringify(expenses));
+  }
+
+  function downloadPDF() {
+    const deleteCells = document.querySelectorAll('.no-print');
+    // إخفاء عمود الحذف مؤقتًا
+    deleteCells.forEach(el => el.style.display = 'none');
+
+    const element = document.getElementById("pdf-section");
+    const opt = {
+      margin: 0.5,
+      filename: "تقرير_النثرية.pdf",
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
+    };
+
+    html2pdf().set(opt).from(element).save().then(() => {
+      // إعادة إظهار عمود الحذف بعد الانتهاء
+      deleteCells.forEach(el => el.style.display = 'table-cell');
+    });
+  }
+
+  function resetAll() {
+    const confirmReset = confirm("هل أنت متأكد أنك تريد إعادة التعيين؟ سيتم مسح كل البيانات!");
+    if (confirmReset) {
+      initialAmount = 0;
+      balance = 0;
+      expenses = [];
+
+      localStorage.removeItem('initialAmount');
+      localStorage.removeItem('expenses');
+
+      document.getElementById("initialAmount").disabled = false;
+      document.getElementById("initialAmount").value = '';
+      document.getElementById("expenseAmount").value = '';
+      document.getElementById("expenseReason").value = '';
+      document.getElementById("initial-display").textContent = '';
+      document.getElementById("balance").textContent = '';
+
+      const tableBody = document.getElementById("expenseTable").querySelector("tbody");
+      tableBody.innerHTML = '';
+    }
+  }
+</script>
+
+</body>
+</html>
